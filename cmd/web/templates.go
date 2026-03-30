@@ -2,10 +2,12 @@ package main
 
 import (
 	"html/template"
+	"io/fs"
 	"path/filepath"
 	"time"
 
 	"snippetbox.fanthom.net/internal/models"
+	"snippetbox.fanthom.net/ui"
 )
 
 // Define a templateData type to act as a holding structure for
@@ -17,10 +19,15 @@ type templateData struct {
 	Form            any
 	Flash           string
 	IsAuthenticated bool
+	CSRFToken       string
 }
 
 func humanDate(t time.Time) string {
-	return t.Format("02 Jan 2006 at 15:04")
+	if t.IsZero() {
+		return ""
+	}
+
+	return t.UTC().Format("02 Jan 2006 at 15:04")
 }
 
 var functions = template.FuncMap{
@@ -31,7 +38,7 @@ func newTemplateCache() (map[string]*template.Template, error) {
 	// Initialize a new map for template cache
 	cache := map[string]*template.Template{}
 
-	pages, err := filepath.Glob("./ui/html/pages/*tmpl.html")
+	pages, err := fs.Glob(ui.Files, "html/pages/*tmpl.html")
 	if err != nil {
 		return nil, err
 	}
@@ -40,24 +47,30 @@ func newTemplateCache() (map[string]*template.Template, error) {
 
 		name := filepath.Base(page)
 
-		// Parse base file into template set
-		ts, err := template.New(name).Funcs(functions).ParseFiles("./ui/html/base.tmpl.html")
+		patterns := []string{
+			"html/base.tmpl.html",
+			"html/partials/*tmpl.html",
+			page,
+		}
+
+		ts, err := template.New(name).Funcs(functions).ParseFS(ui.Files, patterns...)
 		if err != nil {
 			return nil, err
 		}
 
-		// Call ParseGlob *on this template set* to add any partial files
-		ts, err = ts.ParseGlob("./ui/html/partials/*.tmpl.html")
-		if err != nil {
-			return nil, err
-		}
-
-		// Call parse files *on this template set* to add the page
-		ts, err = ts.ParseFiles(page)
-		if err != nil {
-			return nil, err
-		}
+		// // Call ParseGlob *on this template set* to add any partial files
+		// ts, err = ts.ParseGlob("./ui/html/partials/*.tmpl.html")
+		// if err != nil {
+		// 	return nil, err
+		// }
+		//
+		// // Call parse files *on this template set* to add the page
+		// ts, err = ts.ParseFiles(page)
+		// if err != nil {
+		// 	return nil, err
+		// }
 		// Add the template set to the map, sing the name of the page
+
 		cache[name] = ts
 	}
 
